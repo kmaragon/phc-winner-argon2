@@ -22,6 +22,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #include "argon2.h"
 #include "core.h"
@@ -31,7 +35,7 @@
 #define LANES_DEF 1
 #define THREADS_DEF 1
 #define OUTLEN_DEF 32
-#define MAX_PASS_LEN 128
+#define MAX_PASS_LEN 1024
 
 #define UNUSED_PARAMETER(x) (void)(x)
 
@@ -42,7 +46,9 @@ static void usage(const char *cmd) {
            cmd);
     printf("\tPassword is read from stdin\n");
     printf("Parameters:\n");
-    printf("\tsalt\t\tThe salt to use, at least 8 characters\n");
+    printf("\tsaltfile\t\tThe salt file to use, at least 8 characters\n");
+    printf("\t-s <sec>\tset the shared secret file\n");
+    printf("\t-a <dat>\tset associated data file\n");
     printf("\t-i\t\tUse Argon2i (this is the default)\n");
     printf("\t-d\t\tUse Argon2d instead of Argon2i\n");
     printf("\t-id\t\tUse Argon2id instead of Argon2i\n");
@@ -63,10 +69,16 @@ static void usage(const char *cmd) {
     printf("\t-h\t\tPrint %s usage\n", cmd);
 }
 
+static void fatal_arg(const char *error, const char* arg) {
+    fprintf(stderr, "Error: %s: %s\n", error, arg);
+    exit(1);
+}
+
 static void fatal(const char *error) {
     fprintf(stderr, "Error: %s\n", error);
     exit(1);
 }
+
 
 static void print_hex(uint8_t *bytes, size_t bytes_len) {
     size_t i;
@@ -91,11 +103,12 @@ Base64-encoded hash string
 @raw_only display only the hexadecimal of the hash
 @version Argon2 version
 */
-static void run(uint32_t outlen, char *pwd, size_t pwdlen, char *salt, uint32_t t_cost,
+static void run(uint32_t outlen, char *pwd, size_t pwdlen, const char *salt, const size_t saltlen,
+		const char* ad, const size_t adlen, const char* secret, const size_t secretlen, uint32_t t_cost,
                 uint32_t m_cost, uint32_t lanes, uint32_t threads,
                 argon2_type type, int encoded_only, int raw_only, uint32_t version) {
     clock_t start_time, stop_time;
-    size_t saltlen, encodedlen;
+    size_t encodedlen;
     int result;
     unsigned char * out = NULL;
     char * encoded = NULL;
@@ -111,7 +124,6 @@ static void run(uint32_t outlen, char *pwd, size_t pwdlen, char *salt, uint32_t 
         fatal("salt missing");
     }
 
-    saltlen = strlen(salt);
     if(UINT32_MAX < saltlen) {
         fatal("salt is too long");
     }
@@ -132,6 +144,7 @@ static void run(uint32_t outlen, char *pwd, size_t pwdlen, char *salt, uint32_t 
     }
 
     result = argon2_hash(t_cost, m_cost, threads, pwd, pwdlen, salt, saltlen,
+		         ad, adlen, secret, secretlen,
                          out, outlen, encoded, encodedlen, type,
                          version);
     if (result != ARGON2_OK)
@@ -167,6 +180,33 @@ static void run(uint32_t outlen, char *pwd, size_t pwdlen, char *salt, uint32_t 
     free(encoded);
 }
 
+char* read_file(const char* file, size_t* len)
+{
+    struct stat st;
+    if (stat(file, &st)) {
+        fprintf(stderr, "Failed to open file %s: %s", file, strerror(errno));
+	exit(1);
+    }
+
+    *len = st.st_size;
+    char* buf = malloc(*len);
+    FILE* rf = fopen(file, "rb");
+
+    if (!rf) {
+	free(buf);
+	fprintf(stderr, "Failed to open file %s: %s", file, strerror(errno));
+        exit(1);
+    }
+
+    if (fread(buf, 1, *len, rf) != *len) {
+	free(buf);
+	fprintf(stderr, "Failed to read file %s: %s", file, strerror(errno));
+        exit(1);
+    }
+
+    return buf;
+}
+
 int main(int argc, char *argv[]) {
     uint32_t outlen = OUTLEN_DEF;
     uint32_t m_cost = 1 << LOG_M_COST_DEF;
@@ -182,6 +222,9 @@ int main(int argc, char *argv[]) {
     int i;
     size_t pwdlen;
     char pwd[MAX_PASS_LEN], *salt;
+    char* ad = NULL;
+    char* secret = NULL;
+    size_t saltlen, adlen, secretlen;
 
     if (argc < 2) {
         usage(argv[0]);
@@ -200,7 +243,7 @@ int main(int argc, char *argv[]) {
         fatal("Provided password longer than supported in command line utility");
     }
 
-    salt = argv[1];
+    salt = read_file(argv[1], &saltlen);
 
     /* parse options */
     for (i = 2; i < argc; i++) {
@@ -287,6 +330,18 @@ int main(int argc, char *argv[]) {
         } else if (!strcmp(a, "-i")) {
             type = Argon2_i;
             ++types_specified;
+        } else if (!strcmp(a, "-s")) {
+	    i++;
+	    if (i >= argc) {
+	        fatal("missing -s argument");
+	    }
+            secret = read_file(argv[i], &secretlen);
+        } else if (!strcmp(a, "-a")) {
+            i++;
+            if (i >= argc) {
+                fatal("missing -a argument");
+            }
+            ad = read_file(argv[i], &adlen);
         } else if (!strcmp(a, "-d")) {
             type = Argon2_d;
             ++types_specified;
@@ -311,7 +366,7 @@ int main(int argc, char *argv[]) {
                 fatal("missing -v argument");
             }
         } else {
-            fatal("unknown argument");
+            fatal_arg("unknown argument", a);
         }
     }
 
@@ -327,10 +382,24 @@ int main(int argc, char *argv[]) {
         printf("Iterations:\t%u\n", t_cost);
         printf("Memory:\t\t%u KiB\n", m_cost);
         printf("Parallelism:\t%u\n", lanes);
+        printf("Salt:\n");
+	print_hex((uint8_t*)salt, saltlen);
+	printf("AssociatedData:%s\n", ad ? "" : "\tNone");
+	if (ad)
+            print_hex((uint8_t*)ad, adlen);
+	printf("Secret:%s\n", secret ? "" : "\tNone");
+	if (secret)
+	    print_hex((uint8_t*)secret, secretlen);
     }
 
-    run(outlen, pwd, pwdlen, salt, t_cost, m_cost, lanes, threads, type,
+    run(outlen, pwd, pwdlen, salt, saltlen, ad, adlen, secret, secretlen, t_cost, m_cost, lanes, threads, type,
        encoded_only, raw_only, version);
+
+    free(salt);
+    if (ad)
+	free(ad);
+    if (secret)
+	free(secret);
 
     return ARGON2_OK;
 }

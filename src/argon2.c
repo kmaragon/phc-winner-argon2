@@ -100,6 +100,8 @@ int argon2_ctx(argon2_context *context, argon2_type type) {
 int argon2_hash(const uint32_t t_cost, const uint32_t m_cost,
                 const uint32_t parallelism, const void *pwd,
                 const size_t pwdlen, const void *salt, const size_t saltlen,
+		const void* ad, const size_t adlen,
+		const void* secret, const size_t secretlen,
                 void *hash, const size_t hashlen, char *encoded,
                 const size_t encodedlen, argon2_type type,
                 const uint32_t version){
@@ -135,10 +137,10 @@ int argon2_hash(const uint32_t t_cost, const uint32_t m_cost,
     context.pwdlen = (uint32_t)pwdlen;
     context.salt = CONST_CAST(uint8_t *)salt;
     context.saltlen = (uint32_t)saltlen;
-    context.secret = NULL;
-    context.secretlen = 0;
-    context.ad = NULL;
-    context.adlen = 0;
+    context.secret = CONST_CAST(uint8_t*)secret;
+    context.secretlen = (uint32_t)secretlen;
+    context.ad = CONST_CAST(uint8_t*)ad;
+    context.adlen = (uint32_t)adlen;
     context.t_cost = t_cost;
     context.m_cost = m_cost;
     context.lanes = parallelism;
@@ -178,60 +180,75 @@ int argon2_hash(const uint32_t t_cost, const uint32_t m_cost,
 
 int argon2i_hash_encoded(const uint32_t t_cost, const uint32_t m_cost,
                          const uint32_t parallelism, const void *pwd,
-                         const size_t pwdlen, const void *salt,
-                         const size_t saltlen, const size_t hashlen,
-                         char *encoded, const size_t encodedlen) {
+                         const size_t pwdlen, const void *salt, const size_t saltlen,
+			 const void* ad, const size_t adlen, 
+			 const void* secret, const size_t secretlen,
+                         const size_t hashlen, char *encoded, const size_t encodedlen) {
 
     return argon2_hash(t_cost, m_cost, parallelism, pwd, pwdlen, salt, saltlen,
+		       ad, adlen, secret, secretlen,
                        NULL, hashlen, encoded, encodedlen, Argon2_i,
                        ARGON2_VERSION_NUMBER);
 }
 
 int argon2i_hash_raw(const uint32_t t_cost, const uint32_t m_cost,
                      const uint32_t parallelism, const void *pwd,
-                     const size_t pwdlen, const void *salt,
-                     const size_t saltlen, void *hash, const size_t hashlen) {
+                     const size_t pwdlen, const void *salt, const size_t saltlen,
+		     const void* ad, const size_t adlen,
+		     const void* secret, const size_t secretlen,
+		     void *hash, const size_t hashlen) {
 
     return argon2_hash(t_cost, m_cost, parallelism, pwd, pwdlen, salt, saltlen,
+		       ad, adlen, secret, secretlen,
                        hash, hashlen, NULL, 0, Argon2_i, ARGON2_VERSION_NUMBER);
 }
 
 int argon2d_hash_encoded(const uint32_t t_cost, const uint32_t m_cost,
                          const uint32_t parallelism, const void *pwd,
-                         const size_t pwdlen, const void *salt,
-                         const size_t saltlen, const size_t hashlen,
-                         char *encoded, const size_t encodedlen) {
+                         const size_t pwdlen, const void *salt, const size_t saltlen,
+		         const void* ad, const size_t adlen,
+			 const void* secret, const size_t secretlen,
+			 const size_t hashlen, char *encoded, const size_t encodedlen) {
 
     return argon2_hash(t_cost, m_cost, parallelism, pwd, pwdlen, salt, saltlen,
+		       ad, adlen, secret, secretlen,
                        NULL, hashlen, encoded, encodedlen, Argon2_d,
                        ARGON2_VERSION_NUMBER);
 }
 
 int argon2d_hash_raw(const uint32_t t_cost, const uint32_t m_cost,
                      const uint32_t parallelism, const void *pwd,
-                     const size_t pwdlen, const void *salt,
-                     const size_t saltlen, void *hash, const size_t hashlen) {
+                     const size_t pwdlen, const void *salt, const size_t saltlen,
+		     const void* ad, const size_t adlen,
+		     const void* secret, const size_t secretlen,
+		     void *hash, const size_t hashlen) {
 
     return argon2_hash(t_cost, m_cost, parallelism, pwd, pwdlen, salt, saltlen,
+		       ad, adlen, secret, secretlen,
                        hash, hashlen, NULL, 0, Argon2_d, ARGON2_VERSION_NUMBER);
 }
 
 int argon2id_hash_encoded(const uint32_t t_cost, const uint32_t m_cost,
                           const uint32_t parallelism, const void *pwd,
-                          const size_t pwdlen, const void *salt,
-                          const size_t saltlen, const size_t hashlen,
-                          char *encoded, const size_t encodedlen) {
+                          const size_t pwdlen, const void *salt, const size_t saltlen,
+		          const void* ad, const size_t adlen,
+			  const void* secret, const size_t secretlen,
+			  const size_t hashlen, char *encoded, const size_t encodedlen) {
 
     return argon2_hash(t_cost, m_cost, parallelism, pwd, pwdlen, salt, saltlen,
+		       ad, adlen, secret, secretlen,
                        NULL, hashlen, encoded, encodedlen, Argon2_id,
                        ARGON2_VERSION_NUMBER);
 }
 
 int argon2id_hash_raw(const uint32_t t_cost, const uint32_t m_cost,
                       const uint32_t parallelism, const void *pwd,
-                      const size_t pwdlen, const void *salt,
-                      const size_t saltlen, void *hash, const size_t hashlen) {
+                      const size_t pwdlen, const void *salt, const size_t saltlen,
+		      const void* ad, const size_t adlen,
+		      const void* secret, const size_t secretlen,
+		      void *hash, const size_t hashlen) {
     return argon2_hash(t_cost, m_cost, parallelism, pwd, pwdlen, salt, saltlen,
+		       ad, adlen, secret, secretlen,
                        hash, hashlen, NULL, 0, Argon2_id,
                        ARGON2_VERSION_NUMBER);
 }
